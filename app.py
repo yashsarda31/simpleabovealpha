@@ -1,153 +1,144 @@
 import streamlit as st
 import yfinance as yf
 import pandas as pd
-import matplotlib.pyplot as plt
+import plotly.graph_objects as go
 from datetime import datetime, timedelta
 
-# --- Page Configuration (Optional but Recommended) ---
+# App configuration
 st.set_page_config(
-    page_title="Simple Stock Chart",
-    page_icon="📈", # You can use emojis
-    layout="wide" # Use wide layout for better chart display
+    page_title="Stock Analysis App",
+    page_icon="📈",
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
 
-# --- Styling (Optional - Add some custom CSS) ---
+# Custom CSS styling
 st.markdown("""
-<style>
-    .main .block-container {
-        padding-top: 2rem;
-        padding-bottom: 2rem;
-        padding-left: 3rem;
-        padding-right: 3rem;
-    }
-    .stButton>button {
-        color: white; /* White text */
-        background-color: #4F8BF9; /* Blue background */
-        border: none; /* No border */
-        border-radius: 50px; /* Rounded corners */
-        padding: 0.75em 1.5em; /* Padding */
-        font-weight: bold;
-        transition: background-color 0.3s ease; /* Smooth hover effect */
-        width: 100%; /* Make button fill column width */
-        margin-top: 1.8em; /* Add some space above the button */
-    }
-    .stButton>button:hover {
-        background-color: #3A6CB4; /* Darker blue on hover */
-        color: white;
-    }
-    .stTextInput>div>div>input {
-        border-radius: 10px; /* Rounded input field */
-        border: 1px solid #ccc;
-    }
-    .stDateInput>div>div>input {
-        border-radius: 10px; /* Rounded date input */
-        border: 1px solid #ccc;
-    }
-    h1 {
-        color: #2c3e50; /* Darker title color */
-        text-align: center; /* Center title */
-        padding-bottom: 0.5em;
-    }
-    .stPlotlyChart { /* If using Plotly */
-        border-radius: 10px;
-        overflow: hidden; /* Ensures border radius applies */
-    }
-     /* Style the headers for data table */
-    .dataframe th {
-        background-color: #4F8BF9;
-        color: white;
-        text-align: left;
-    }
-    /* Style the dataframe rows */
-    .dataframe tr:nth-child(even) {
-        background-color: #f2f2f2;
-    }
-</style>
+    <style>
+        .main {background-color: #f8f9fa;}
+        .reportview-container .main .block-container {max-width: 95%;}
+        h1 {color: #2c3e50;}
+        .stTextInput>div>div>input {border: 2px solid #3498db; border-radius: 5px;}
+        .st-bb {background-color: white;}
+        .st-at {background-color: #3498db;}
+        .css-1aumxhk {background-color: #ffffff;}
+    </style>
 """, unsafe_allow_html=True)
 
-# --- App Title ---
-st.title("📈 Simple Stock Price Viewer")
-st.write("Enter a stock ticker symbol to see its price chart with 50 & 200 Day EMAs.")
-st.markdown("---") # Divider
+# App header
+st.title("📊 Stock Technical Analysis Dashboard")
+st.markdown("Visualize stock prices with Exponential Moving Averages (EMAs)")
 
-# --- User Input Area ---
-col1, col2, col3 = st.columns([2, 1, 1]) # Create columns for layout
-
-with col1:
+# Sidebar inputs
+with st.sidebar:
+    st.header("⚙️ Parameters")
     ticker_symbol = st.text_input(
-        "Stock Ticker Symbol:",
-        value="AAPL", # Default value
-        placeholder="E.g., AAPL, GOOGL, MSFT",
-        help="Enter the stock ticker symbol from Yahoo Finance."
-    ).upper() # Convert to uppercase
-
-# Sensible default date range (e.g., last 3 years)
-end_date = datetime.now().date()
-start_date = end_date - timedelta(days=3*365)
-
-with col2:
-    start_date_input = st.date_input(
+        "Enter Stock Ticker", 
+        value="AAPL",
+        placeholder="e.g., AAPL",
+        help="Enter a valid stock ticker symbol from Yahoo Finance"
+    )
+    start_date = st.date_input(
         "Start Date",
-        value=start_date,
-        max_value=end_date - timedelta(days=1) # Cannot select today as start if end is today
+        value=datetime.now() - timedelta(days=365),
+        max_value=datetime.now() - timedelta(days=1)
     )
-
-with col3:
-    end_date_input = st.date_input(
+    end_date = st.date_input(
         "End Date",
-        value=end_date,
-        min_value=start_date_input + timedelta(days=1), # Cannot select before start date
-        max_value=end_date
+        value=datetime.now(),
+        max_value=datetime.now()
     )
 
-# --- Fetch Data Button ---
-# Place button in its own centered column or span columns if needed
-col_button_mid = st.columns([1, 1, 1])[1] # Center the button in a 3-column layout
-
-fetch_button = col_button_mid.button("📊 Fetch & Plot Data")
-
-st.markdown("---") # Divider
-
-# --- Data Fetching and Plotting Logic ---
-if fetch_button and ticker_symbol:
+# Function to load data
+@st.cache_data
+def load_data(ticker, start, end):
     try:
-        # Add a spinner for better UX during data fetching
-        with st.spinner(f"Fetching data for {ticker_symbol}..."):
-            # Fetch data from yfinance
-            stock_data = yf.download(
-                ticker_symbol,
-                start=start_date_input,
-                end=end_date_input,
-                progress=False # Hide yfinance progress bar
-            )
+        data = yf.download(ticker, start=start, end=end)
+        if data.empty:
+            return None
+        # Calculate EMAs
+        data['EMA50'] = data['Close'].ewm(span=50, adjust=False).mean()
+        data['EMA200'] = data['Close'].ewm(span=200, adjust=False).mean()
+        return data
+    except Exception as e:
+        st.error(f"Error loading data: {str(e)}")
+        return None
 
-        if stock_data.empty:
-            st.warning(f"No data found for ticker '{ticker_symbol}' in the selected date range. Check the ticker or dates.")
-        else:
-            st.subheader(f"{ticker_symbol} Stock Price")
-            st.write(f"Displaying data from {start_date_input.strftime('%Y-%m-%d')} to {end_date_input.strftime('%Y-%m-%d')}")
+# Main content
+if ticker_symbol:
+    with st.spinner('Loading stock data...'):
+        stock_data = load_data(ticker_symbol, start_date, end_date)
+    
+    if stock_data is not None:
+        # Create interactive plot
+        fig = go.Figure()
+        
+        # Add price trace
+        fig.add_trace(go.Scatter(
+            x=stock_data.index,
+            y=stock_data['Close'],
+            name='Closing Price',
+            line=dict(color='#2ecc71', width=2)
+        ))
+        
+        # Add EMA traces
+        fig.add_trace(go.Scatter(
+            x=stock_data.index,
+            y=stock_data['EMA50'],
+            name='50 EMA',
+            line=dict(color='#3498db', width=2, dash='dot')
+        ))
+        
+        fig.add_trace(go.Scatter(
+            x=stock_data.index,
+            y=stock_data['EMA200'],
+            name='200 EMA',
+            line=dict(color='#e74c3c', width=2, dash='dot')
+        ))
+        
+        # Update layout
+        fig.update_layout(
+            title=f'{ticker_symbol} Stock Price with EMAs',
+            xaxis_title='Date',
+            yaxis_title='Price (USD)',
+            template='plotly_white',
+            hovermode='x unified',
+            legend=dict(
+                orientation="h",
+                yanchor="bottom",
+                y=1.02,
+                xanchor="right",
+                x=1
+            ),
+            height=600,
+            margin=dict(l=50, r=50, b=50, t=80)
+        )
+        
+        # Display the plot
+        st.plotly_chart(fig, use_container_width=True)
+        
+        # Display recent data
+        st.subheader("Recent Data Overview")
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Latest Close Price", 
+                      f"${stock_data['Close'].iloc[-1]:.2f}",
+                      f"{stock_data['Close'].iloc[-1] - stock_data['Close'].iloc[-2]:.2f}")
+        with col2:
+            st.metric("50 EMA Value", 
+                      f"${stock_data['EMA50'].iloc[-1]:.2f}",
+                      f"{stock_data['EMA50'].iloc[-1] - stock_data['EMA50'].iloc[-2]:.2f}")
+        with col3:
+            st.metric("200 EMA Value", 
+                      f"${stock_data['EMA200'].iloc[-1]:.2f}",
+                      f"{stock_data['EMA200'].iloc[-1] - stock_data['EMA200'].iloc[-2]:.2f}")
+        
+        # Show raw data
+        if st.checkbox("Show Raw Data"):
+            st.dataframe(stock_data.tail(10), height=300)
+else:
+    st.warning("Please enter a stock ticker symbol to begin analysis.")
 
-            # Calculate EMAs
-            stock_data['EMA_50'] = stock_data['Close'].ewm(span=50, adjust=False).mean()
-            stock_data['EMA_200'] = stock_data['Close'].ewm(span=200, adjust=False).mean()
-
-            # --- Plotting with Matplotlib ---
-            fig, ax = plt.subplots(figsize=(12, 6)) # Adjust figure size
-
-            ax.plot(stock_data.index, stock_data['Close'], label='Close Price', color='lightblue', linewidth=1.5)
-            ax.plot(stock_data.index, stock_data['EMA_50'], label='50-Day EMA', color='orange', linewidth=1.5)
-            ax.plot(stock_data.index, stock_data['EMA_200'], label='200-Day EMA', color='purple', linewidth=1.5)
-
-            # Customize the plot
-            ax.set_title(f'{ticker_symbol} Closing Price and EMAs', fontsize=16)
-            ax.set_xlabel('Date', fontsize=12)
-            ax.set_ylabel('Price (USD)', fontsize=12)
-            ax.legend(fontsize=10)
-            ax.grid(True, linestyle='--', alpha=0.6) # Add grid lines
-            plt.xticks(rotation=45) # Rotate x-axis labels for better readability
-            plt.tight_layout() # Adjust layout to prevent labels overlapping
-
-            # Display the plot in Streamlit
-            st.pyplot(fig)
-
-           
+# Footer
+st.markdown("---")
+st.markdown("ℹ️ Data provided by Yahoo Finance | Made with Streamlit")

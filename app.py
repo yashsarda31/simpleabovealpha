@@ -1,44 +1,49 @@
+import streamlit as st
 import yfinance as yf
 import pandas as pd
 import matplotlib.pyplot as plt
-import streamlit as st
+from datetime import datetime, timedelta
 
-# Streamlit Page Configuration
-st.set_page_config(page_title="Stock EMA Chart", layout="wide", initial_sidebar_state="expanded")
+# --- Page Configuration (Optional but Recommended) ---
+st.set_page_config(
+    page_title="Simple Stock Chart",
+    page_icon="📈", # You can use emojis
+    layout="wide" # Use wide layout for better chart display
+)
 
-st.title("📈 Stock Chart with 50 & 200 EMA")
-ticker = st.text_input("Enter a stock ticker (e.g., AAPL, TSLA, MSFT)", "AAPL")
+# --- Styling (Optional - Add some custom CSS) ---
+st.markdown("""
+<style>
+    .main .block-container {
+        padding-top: 2rem;
+        padding-bottom: 2rem;
+        padding-left: 3rem;
+        padding-right: 3rem;
+    }
+    .stButton>button {
+        color: #4F8BF9;
+        border-radius: 50px;
+        height: 3em;
+        width: 100%; /* Make button wider */
+    }
+    .stTextInput>div>div>input {
+        border-radius: 10px;
+    }
+    h1 {
+        color: #4F8BF9; /* Title color */
+    }
+</style>
+""", unsafe_allow_html=True)
 
-if ticker:
-    # Validate input
-    if not ticker.isalnum():
-        st.error("Invalid ticker format. Please enter a valid alphanumeric ticker.")
-    else:
-        try:
-            # Fetch data from yfinance with caching
-            @st.cache_data
-            def fetch_data(ticker):
-                return yf.download(ticker, period="1y", interval="1d")
+# --- App Title ---
+st.title("📈 Simple Stock Price Viewer")
+st.write("Enter a stock ticker symbol to see its price chart with 50 & 200 EMA.")
 
-            df = fetch_data(ticker)
+# --- User Input Area ---
+col1, col2 = st.columns([2, 1]) # Create columns for layout
 
-            if df.empty:
-                st.error("No data found for the specified ticker. Please check the ticker.")
-            else:
-                # Calculate EMAs
-                df['EMA50'] = df['Close'].ewm(span=50, adjust=False).mean()
-                df['EMA200'] = df['Close'].ewm(span=200, adjust=False).mean()
-
-                # Plotting
-                fig, ax = plt.subplots(figsize=(12, 6))
-                ax.plot(df.index, df['Close'], label='Closing Price', color='black')
-                ax.plot(df.index, df['EMA50'], label='50 EMA', color='blue')
-                ax.plot(df.index, df['EMA200'], label='200 EMA', color='red')
-                ax.set_title(f"{ticker.upper()} - 50 & 200 EMA")
-                ax.set_xlabel("Date")
-                ax.set_ylabel("Price (USD)")
-                ax.legend()
-
-                st.pyplot(fig)
-        except Exception as e:
-            st.error(f"Error fetching data: {e}")
+with col1:
+    ticker_symbol = st.text_input(
+        "Enter Stock Ticker Symbol:",
+        value="AAPL", # Default value
+        help="E.g., AAPL, GOOGL, MSFT,

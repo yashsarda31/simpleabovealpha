@@ -1,179 +1,70 @@
 import streamlit as st
 import yfinance as yf
+import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
 import pandas as pd
-import plotly.graph_objects as go
 
-# Set page configuration
-st.set_page_config(
-    page_title="Stock EMA Visualizer",
-    page_icon="📈",
-    layout="wide"
-)
+# Page config
+st.set_page_config(page_title="Stock EMA Chart", page_icon="📈", layout="centered")
 
-# Add custom CSS for better appearance
+# Custom CSS for styling
 st.markdown("""
-<style>
-    .main {
-        background-color: #f8f9fa;
-    }
-    h1, h2, h3 {
-        color: #2c3e50;
-    }
-    .stButton>button {
-        background-color: #3498db;
-        color: white;
-        border-radius: 5px;
-        padding: 0.5rem 1rem;
-    }
-    .stButton>button:hover {
-        background-color: #2980b9;
-    }
-</style>
+    <style>
+    .main { background-color: #F3F6FA; }
+    .stTextInput>div>div>input { background-color: #e6f0ff; }
+    .stButton>button { background-color: #4F8BF9; color: white; font-weight: bold;}
+    .stPlotlyChart, .stImage { border-radius: 12px; }
+    </style>
 """, unsafe_allow_html=True)
 
-# App title and description
+# Title and description
 st.title("📈 Stock EMA Visualizer")
-st.markdown("### Analyze stock trends with 50 and 200 day Exponential Moving Averages")
+st.markdown("""
+Enter a stock ticker to visualize its closing price along with **50 EMA** and **200 EMA**.<br>
+*Example: `AAPL`, `MSFT`, `TSLA`, `GOOGL`, `NVDA`*  
+""", unsafe_allow_html=True)
 
-# Input section
-col1, col2, col3 = st.columns([2, 1, 1])
+# User input
+ticker = st.text_input("Enter Stock Ticker", value="AAPL", max_chars=10).upper()
+
+# Date range
+col1, col2 = st.columns(2)
 with col1:
-    ticker = st.text_input("Enter Stock Ticker:", "AAPL").upper()
+    start_date = st.date_input("Start Date", pd.to_datetime("2022-01-01"))
 with col2:
-    period = st.selectbox(
-        "Time Period:", 
-        ["1 Month", "3 Months", "6 Months", "1 Year", "2 Years", "5 Years", "Max"],
-        index=3
-    )
-    # Map to yfinance period format
-    period_map = {
-        "1 Month": "1mo", "3 Months": "3mo", "6 Months": "6mo",
-        "1 Year": "1y", "2 Years": "2y", "5 Years": "5y", "Max": "max"
-    }
-    yf_period = period_map[period]
-with col3:
-    theme = st.selectbox("Theme", ["Light", "Dark"])
-    analyze_button = st.button("Analyze Stock")
+    end_date = st.date_input("End Date", pd.to_datetime("today"))
 
-# Main section - fetch and display data
-if analyze_button or 'data' in st.session_state:
-    with st.spinner(f"Fetching data for {ticker}..."):
-        try:
-            # Get stock data
-            stock_data = yf.download(ticker, period=yf_period)
-            
+if st.button("Fetch & Plot Data"):
+    try:
+        # Fetch data
+        data = yf.download(ticker, start=start_date, end=end_date)
+        if data.empty:
+            st.error(f"No data found for ticker `{ticker}`.")
+        else:
             # Calculate EMAs
-            stock_data['EMA50'] = stock_data['Close'].ewm(span=50, adjust=False).mean()
-            stock_data['EMA200'] = stock_data['Close'].ewm(span=200, adjust=False).mean()
+            data["EMA50"] = data["Close"].ewm(span=50, adjust=False).mean()
+            data["EMA200"] = data["Close"].ewm(span=200, adjust=False).mean()
             
-            # Get company info
-            try:
-                stock_info = yf.Ticker(ticker)
-                company_name = stock_info.info.get('longName', ticker)
-            except:
-                company_name = ticker
-            
-            # Display company name and metrics
-            latest_data = stock_data.iloc[-1]
-            previous_data = stock_data.iloc[-2] if len(stock_data) > 1 else latest_data
-            current_price = latest_data['Close']
-            price_change = current_price - previous_data['Close']
-            price_change_pct = (price_change / previous_data['Close']) * 100
-            
-            st.header(f"{company_name} ({ticker})")
-            
-            # Display metrics
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                st.metric(
-                    "Current Price", 
-                    f"${current_price:.2f}", 
-                    f"{price_change:.2f} ({price_change_pct:.2f}%)"
-                )
-            with col2:
-                st.metric("50-Day EMA", f"${latest_data['EMA50']:.2f}")
-            with col3:
-                st.metric("200-Day EMA", f"${latest_data['EMA200']:.2f}")
-            
-            # Set theme colors
-            if theme == "Dark":
-                template = "plotly_dark"
-                plot_bg = "#1e1e1e"
-                paper_bg = "#1e1e1e"
-                text_color = "white"
-            else:
-                template = "plotly_white"
-                plot_bg = "white"
-                paper_bg = "white"
-                text_color = "black"
-            
-            # Create plot with Plotly
-            fig = go.Figure()
-            
-            # Add traces
-            fig.add_trace(go.Scatter(
-                x=stock_data.index,
-                y=stock_data['Close'],
-                mode='lines',
-                name='Stock Price',
-                line=dict(color='#3498db', width=2)
-            ))
-            
-            fig.add_trace(go.Scatter(
-                x=stock_data.index,
-                y=stock_data['EMA50'],
-                mode='lines',
-                name='50-Day EMA',
-                line=dict(color='#e74c3c', width=1.5)
-            ))
-            
-            fig.add_trace(go.Scatter(
-                x=stock_data.index,
-                y=stock_data['EMA200'],
-                mode='lines',
-                name='200-Day EMA',
-                line=dict(color='#2ecc71', width=1.5)
-            ))
-            
-            # Update layout
-            fig.update_layout(
-                title=f"{company_name} Stock Chart with EMAs",
-                xaxis_title="Date",
-                yaxis_title="Price (USD)",
-                height=600,
-                template=template,
-                plot_bgcolor=plot_bg,
-                paper_bgcolor=paper_bg,
-                font=dict(color=text_color),
-                hovermode="x unified"
-            )
-            
-            # Display the chart
-            st.plotly_chart(fig, use_container_width=True)
-            
-            # Technical Analysis Insights
-            st.subheader("Technical Analysis")
-            
-            latest = stock_data.iloc[-1]
-            
-            # Simple EMA analysis
-            if latest['Close'] > latest['EMA50'] and latest['EMA50'] > latest['EMA200']:
-                st.success("📈 Strong Uptrend: Price is above both 50 and 200 EMAs, and 50 EMA is above 200 EMA.")
-            elif latest['Close'] < latest['EMA50'] and latest['EMA50'] < latest['EMA200']:
-                st.error("📉 Strong Downtrend: Price is below both 50 and 200 EMAs, and 50 EMA is below 200 EMA.")
-            elif latest['Close'] > latest['EMA50'] and latest['EMA50'] < latest['EMA200']:
-                st.info("⚠️ Potential Reversal: Price is above 50 EMA but 50 EMA is below 200 EMA, suggesting possible upward momentum.")
-            else:
-                st.warning("🔄 Mixed Signals: The indicators are showing conflicting signals.")
-                
-            # Show data table
-            with st.expander("View Data Table"):
-                st.dataframe(stock_data[['Close', 'EMA50', 'EMA200']])
-                
-        except Exception as e:
-            st.error(f"Error fetching data: {e}")
-            st.info("Please check if the ticker symbol is correct and try again.")
+            # Plot
+            fig, ax = plt.subplots(figsize=(10, 6))
+            ax.plot(data.index, data["Close"], label="Close Price", color="#0072B2", linewidth=2)
+            ax.plot(data.index, data["EMA50"], label="50 EMA", color="#FF9800", linewidth=2, linestyle="--")
+            ax.plot(data.index, data["EMA200"], label="200 EMA", color="#E91E63", linewidth=2, linestyle="--")
+            ax.set_title(f"{ticker} Price with 50 EMA & 200 EMA", fontsize=18, fontweight='bold')
+            ax.set_xlabel("Date")
+            ax.set_ylabel("Price (USD)")
+            ax.legend()
+            ax.grid(alpha=0.2)
+            ax.xaxis.set_major_locator(mdates.MonthLocator())
+            ax.xaxis.set_major_formatter(mdates.DateFormatter('%b %Y'))
+            plt.xticks(rotation=30)
+            plt.tight_layout()
 
-# Footer
-st.markdown("---")
-st.markdown("*Data provided by Yahoo Finance. This app is for educational purposes only and not financial advice.*")
+            st.pyplot(fig)
+    except Exception as e:
+        st.error(f"An error occurred: {e}")
+
+st.markdown("""
+---
+*Made with ❤️ using [Streamlit](https://streamlit.io/) & [yfinance](https://pypi.org/project/yfinance/)*
+""")
